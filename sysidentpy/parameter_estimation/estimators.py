@@ -11,6 +11,8 @@ import numpy as np
 
 from ..narmax_base import InformationMatrix
 
+import torch
+
 
 class EstimatorError(Exception):
     """Generic Python-exception-derived object raised by estimator functions.
@@ -40,6 +42,7 @@ class Estimators:
         alpha=np.finfo(np.float64).eps,
         gama=0.2,
         weight=0.02,
+        epochs=1000,
         basis_function=None,
     ):
         self.eps = eps
@@ -53,6 +56,7 @@ class Estimators:
         self.weight = weight  # <0  e <1
         self.xi = None
         self.theta_evolution = None
+        self.epochs = epochs
         self.basis_function = basis_function
         self._validate_params()
 
@@ -68,6 +72,7 @@ class Estimators:
             "alpha": self.alpha,
             "gama": self.gama,
             "weight": self.weight,
+            "epochs": self.epochs,
         }
         for attribute, value in attributes.items():
             if not isinstance(value, (np.integer, int, float)):
@@ -86,6 +91,12 @@ class Estimators:
                     f"{attribute} must be positive. Got {value}"
                     "Check the documentation for allowed values"
                 )
+
+            if attribute == "epochs":
+                if value <= 0:
+                    raise ValueError(
+                        f"{attribute} must be positive and greater than 0. Got {value}."
+                    )
 
     def _check_linear_dependence_rows(self, psi):
         if np.linalg.matrix_rank(psi) != psi.shape[1]:
@@ -1007,3 +1018,45 @@ class Estimators:
             theta = self.ridge_regression_classic(psi, y)
 
         return theta
+
+    def gradient_least_squares(self, psi: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """Estimate the model parameters using simple Gradient descent method,
+        with least squares based loss function.
+
+        Parameters
+        ----------
+        psi : ndarray of floats
+            The information matrix of the model.
+        y : array-like of shape = y_training
+            The data used to training the model.
+
+        Returns
+        -------
+        theta : array-like of shape = number_of_model_elements
+            The estimated parameters of the model.
+
+        References
+        ----------
+        - Wikipedia entry on Gradient descent
+           https://en.wikipedia.org/wiki/Gradient_descent
+        """
+        psi = psi.astype(np.float32)
+        y = y[self.max_lag :, 0].reshape(-1, 1).astype(np.float32)
+
+        psi = torch.from_numpy(psi)
+        y = torch.from_numpy(y)
+
+        theta = torch.normal(mean=0.0, std=1.0, size=(psi.shape[1], 1))
+        theta.requires_grad_(True)
+
+        for epoch in range(self.epochs):
+            pt = torch.matmul(psi, theta)  # psi*theta product
+            loss = torch.mean(torch.square(pt - y))
+
+            loss.backward()
+            theta.data.sub_(self.gama * theta.grad.data)
+            theta.grad.data.zero_()
+
+        print(f"Training stopped at Epoch {epoch+1}, Loss: {loss.detach().numpy()}")
+
+        return theta.detach().numpy()

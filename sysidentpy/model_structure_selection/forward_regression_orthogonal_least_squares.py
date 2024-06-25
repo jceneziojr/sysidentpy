@@ -173,6 +173,7 @@ class FROLS(Estimators, BaseMSS):
         alpha: np.float64 = np.finfo(np.float64).eps,  # default is machine eps
         gama: float = 0.2,
         weight: float = 0.02,
+        epochs: int = 1000,
         basis_function: Union[Polynomial, Fourier] = Polynomial(),
         model_type: str = "NARMAX",
     ):
@@ -201,6 +202,7 @@ class FROLS(Estimators, BaseMSS):
             alpha=alpha,  # ridge regression parameter
             gama=gama,
             weight=weight,
+            epochs=epochs,
             basis_function=basis_function,
         )
         self.ensemble = None
